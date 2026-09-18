@@ -123,16 +123,40 @@ args = ["--dir", "/path/to/Tsinghua-agent", "--filter", "@thu-agent/mcp-server",
 THU_AGENT_MAX_RISK = "read"   # 给第三方模型建议只读
 ```
 
-### 豆包桌面版 / 其他支持自定义 MCP 的客户端
+### 豆包桌面版（HTTP 连接器）
 
-判断标准：客户端设置里能否添加"**本地命令行（stdio）MCP server**"。
-豆包桌面版 2025 起逐步支持 MCP；若工作版设置里有 MCP/扩展入口且允许填
-command + args，就按 Claude Desktop 同样的 JSON/表单填法接入，并建议在
-env 里注入 `THU_AGENT_MAX_RISK=read`（不同模型对两段式确认协议的遵守
-程度不一，只读模式把写工具整体隐藏，最稳）。
+豆包只支持 HTTP 传输，用本机 HTTP 入口（`packages/mcp-server/src/http.ts`）：
 
-注意：工作版若把 agent 跑在云端沙箱（而非本机），则同手机 App 一样属于
-下面的云端情形，无法直接连本机 stdio server。
+```bash
+# 1) 先在本机常驻启动 HTTP server（默认端口 9876，仅监听 127.0.0.1）
+pnpm --filter @thu-agent/mcp-server start:http
+# 想放开写工具时：THU_AGENT_MAX_RISK=write+pay pnpm --filter @thu-agent/mcp-server start:http
+```
+
+```bash
+# 2) 豆包"新建自定义连接器"里填：
+#    服务器名称： thu-agent
+#    传输类型：   HTTP
+#    服务器 URL： http://127.0.0.1:9876/mcp
+#    自定义 Headers：留空（若启动时设了 THU_HTTP_TOKEN，
+#                 则加 Authorization: Bearer <THU_HTTP_TOKEN 的值>）
+```
+
+- 仅监听 loopback，凭据与学校会话不出本机；`.env` 的 `THU_AGENT_MOCK=0` 时
+  即为真实数据
+- **豆包等第三方模型建议保持 `THU_AGENT_MAX_RISK=read`**（当前 .env 即是）：
+  26 个写/资金工具整体不注册，只读最稳
+- 可选 `THU_HTTP_TOKEN=<任意串>`：设置后连接器需带 `Authorization: Bearer <串>`
+  头，防止本机其他进程调用
+- server 需保持运行（前台终端或 launchd 常驻）；豆包连接器"仅支持在本地电脑
+  中使用"正好匹配本机 HTTP 形态
+
+### 豆包工作版等其他支持本地命令行 MCP 的客户端
+
+判断标准：客户端设置里能否添加"**本地命令行（stdio）MCP server**"。能的话
+按 Claude Desktop 同样的 JSON/表单填法接入，并在 env 里注入
+`THU_AGENT_MAX_RISK=read`（不同模型对两段式确认协议的遵守程度不一，只读
+模式把写工具整体隐藏，最稳）。
 
 接好后重启客户端，问一句"我卡里还有多少钱"即可验证连通。
 

@@ -15,6 +15,7 @@
         "start": "tsx src/index.ts",
         "typecheck": "tsc --noEmit",
         "smoke": "tsx src/smoke.ts",
-        "perm-check": "tsx src/perm-check.ts"
+        "perm-check": "tsx src/perm-check.ts",
+        "start:http": "tsx src/http.ts"
     }
 }
