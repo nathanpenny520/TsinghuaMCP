@@ -109,8 +109,9 @@ async function checkCrSeats({ session, state }: Env): Promise<string[]> {
         try {
             let semesterId = v.semesterId;
             if (!semesterId) {
-                const sems = await session.run(`mon_cr_sems`, "read", (h) => h.getCrAvailableSemesters());
-                semesterId = sems[sems.length - 1]?.id;
+                // 默认校历当前学期；CR 学期列表排序不保证最新在最后，不能用末尾
+                const cal = await session.run(`mon_cr_cal`, "read", (h) => h.getCalendar());
+                semesterId = cal.semesterId;
             }
             if (!semesterId) continue;
             const result = await session.run(`mon_cr:${v.courseId}`, "read", (h) =>

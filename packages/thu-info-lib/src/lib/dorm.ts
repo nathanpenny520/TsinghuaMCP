@@ -78,7 +78,9 @@ export const getElePayRecord = async (
                         .filter((it) => it.type === "tag" && it.tagName === "td")
                         .map((it) => getCheerioText(it, 1)) as [string, string, string, string, string, string],
                 ])
-                .get();
+                .get()
+                // 无记录时上游会渲染出全空行，过滤掉避免调用方拿到 [["",...]]
+                .filter((cells) => cells.some((c) => c !== ""));
         },
         MOCK_ELE_PAY_RECORD,
     );

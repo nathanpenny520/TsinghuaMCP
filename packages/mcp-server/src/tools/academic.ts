@@ -11,10 +11,11 @@ const AVAILABLE = 5;
 export function academicTools({ session }: Deps): ToolDef[] {
     const run = session.run.bind(session);
 
-    const latestSemester = async (): Promise<string | undefined> => {
-        const sems = await run("get_cr_semesters", "read", (h) => h.getCrAvailableSemesters());
-        return sems[sems.length - 1]?.id;
-    };
+    // 选课类查询的默认学期：校历当前学期。CR 可选学期列表的排序不保证最新
+    // 在最后（实测末尾是 2025-2026-2），用它当默认会把请求打到已结课学期，
+    // selectKc 等接口对老学期直接返回 HTTP 500。
+    const currentSemester = async (): Promise<string | undefined> =>
+        (await run("get_calendar", "read", (h) => h.getCalendar())).semesterId;
 
     return [
         tool({
@@ -155,9 +156,7 @@ export function academicTools({ session }: Deps): ToolDef[] {
             description: "查询已选课程列表。",
             inputSchema: { semesterId: z.string().optional().describe("学年学期，如 2026-2027-1，缺省校历当前学期") },
             handler: async ({ semesterId }) => {
-                // 已选课程默认当前学期；CR 可选学期列表（latestSemester）在选课期外
-                // 可能不含当前学期，只应给选课/退课等写操作用。
-                const sem = semesterId ?? (await run("get_calendar", "read", (h) => h.getCalendar())).semesterId;
+                const sem = semesterId ?? (await currentSemester());
                 if (!sem) return ok({ error: "没有可选学期" });
                 const courses = await run("get_selected_courses", "read", (h) => h.getSelectedCourses(sem));
                 return ok({ semesterId: sem, courses });
@@ -175,7 +174,7 @@ export function academicTools({ session }: Deps): ToolDef[] {
                 page: z.number().int().optional(),
             },
             handler: async ({ name, id, dayOfWeek, period, semesterId, page }) => {
-                const sem = semesterId ?? (await latestSemester());
+                const sem = semesterId ?? (await currentSemester());
                 if (!sem) return ok({ error: "没有可选学期" });
                 const result = await run("search_cr_courses", "read", (h) =>
                     h.searchCrCourses({ semester: sem, name, id, dayOfWeek, period, page: page ?? 1 } as never));
@@ -187,7 +186,7 @@ export function academicTools({ session }: Deps): ToolDef[] {
             description: "查询选课状态：当前阶段、我的排队情况、余量统计发布时间。",
             inputSchema: { semesterId: z.string().optional() },
             handler: async ({ semesterId }) => {
-                const sem = semesterId ?? (await latestSemester());
+                const sem = semesterId ?? (await currentSemester());
                 if (!sem) return ok({ error: "没有可选学期" });
                 const [stage, queue, meta] = await Promise.all([
                     run("get_cr_current_stage", "read", (h) => h.getCrCurrentStage(sem)),

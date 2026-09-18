@@ -333,7 +333,12 @@ export const roam = async (helper: InfoHelper, policy: RoamingPolicy, payload: s
     case "gitlab": {
         const data = await uFetch(GITLAB_LOGIN_URL);
         if (data.includes("sign_out")) return data;
-        const authenticity_token = cheerio.load(data)("[name=authenticity_token]").attr()!.value;
+        // 2026-09 实测：登录页改为精简的 CSRF 自动提交页，
+        // input[name=authenticity_token] 已无 value，token 实际在 meta[name=csrf-token]。
+        const $gl = cheerio.load(data);
+        const authenticity_token =
+            $gl("meta[name=csrf-token]").attr()?.content ??
+            $gl("input[name=authenticity_token]").attr()?.value ?? "";
         const sm2PublicKey = cheerio.load(await uFetch(GITLAB_AUTH_URL, {authenticity_token}))("#sm2publicKey").text();
         if (sm2PublicKey === "") {
             throw new LoginError("Failed to get public key.");

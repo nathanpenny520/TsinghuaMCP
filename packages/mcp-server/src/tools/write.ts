@@ -81,9 +81,11 @@ export function writeTools({ session, state, config, dataDir }: Deps): ToolDef[]
             },
         });
 
+    // 选课写操作的默认学期：校历当前学期。不能取 CR 可选学期列表的末尾——
+    // 其排序不保证最新在最后（实测末尾是 2025-2026-2，会打着上学期选课）。
     const latestSemester = async (): Promise<string | undefined> => {
-        const sems = await run("get_cr_semesters", "read", (h) => h.getCrAvailableSemesters());
-        return sems[sems.length - 1]?.id;
+        const cal = await run("get_calendar", "read", (h) => h.getCalendar());
+        return cal.semesterId ?? (await run("get_cr_semesters", "read", (h) => h.getCrAvailableSemesters())).at(-1)?.id;
     };
 
     return [
@@ -229,35 +231,60 @@ export function writeTools({ session, state, config, dataDir }: Deps): ToolDef[]
                 const libraries = await run("book_seat_libs", "read", (h) => h.getLibraryList());
                 const lib = libraries.find((l) => l.zhName.includes(a.library));
                 if (!lib) throw new Error(`未找到馆区 "${a.library}"`);
+                // 区域输入支持"四层B区"这类带楼层的写法：先按楼层过滤，剩余文本
+                // 归一化后匹配区域（"B区"↔"B阅览区"）。不带楼层且同名区域存在
+                // 多个楼层时直接报错列出楼层，避免静默订到别的楼层。
+                type FloorEl = Awaited<ReturnType<InfoHelper["getLibraryFloorList"]>>[number];
+                type SectionEl = Awaited<ReturnType<InfoHelper["getLibrarySectionList"]>>[number];
+                const floorMatch = String(a.section).match(/([一二三四五六1-6])\s*层/);
+                const floorHint = floorMatch?.[0];
+                const secText = String(a.section).replace(/([一二三四五六1-6])\s*层/, "").trim();
+                const norm = (s: string) => s.replace(/阅览区/g, "").replace(/区/g, "").trim();
                 const floors = await run("book_seat_floors", "read", (h) => h.getLibraryFloorList(lib, dateChoice));
+                const matched: { floor: FloorEl; sec: SectionEl }[] = [];
                 for (const f of floors) {
+                    if (floorHint && !(f.zhName as string).includes(floorHint)) continue;
                     const sections = await run("book_seat_sections", "read", (h) => h.getLibrarySectionList(f, dateChoice));
-                    const sec = sections.find((s) => s.zhName.includes(a.section));
-                    if (!sec) continue;
+                    for (const s of sections) {
+                        if (s.zhName.includes(secText) || norm(s.zhName).includes(norm(secText))) {
+                            matched.push({ floor: f, sec: s });
+                        }
+                    }
+                }
+                if (matched.length === 0) {
+                    throw new Error(`没找到区域 "${a.section}"——请先用 thu_get_library_seats 核对区域名称`);
+                }
+                if (matched.length > 1 && !floorHint) {
+                    const floorNames = [...new Set(matched.map((m) => m.floor.zhName as string))].join("、");
+                    throw new Error(`区域 "${a.section}" 在多个楼层都有（${floorNames}），请在区域名里带上楼层，如 "四层B区"`);
+                }
+                for (const { floor, sec } of matched) {
                     const seats = await run("book_seat_seats", "read", (h) => h.getLibrarySeatList(sec, dateChoice));
                     const seat = seats.find((s) => s.zhName.includes(String(a.seatNo)));
                     if (seat) {
                         return [
                             { seat, section: sec, dateChoice },
-                            `订座：${lib.zhName} ${sec.zhName} ${seat.zhName}（${dateChoice === 0 ? "今天" : "明天"}）`,
+                            `订座：${lib.zhName} ${floor.zhName}${sec.zhName} ${seat.zhName}（${dateChoice === 0 ? "今天" : "明天"}）`,
                         ];
                     }
                 }
-                throw new Error(`没找到座位 "${a.seatNo}"——请先用 thu_get_library_seats 核对区域与座位号`);
+                throw new Error(`该区域没找到座位 "${a.seatNo}"——请先用 thu_get_library_seats 核对`);
             },
         }),
         makeWrite({
             name: "thu_prepare_cancel_seat_booking",
             action: "cancel_seat_booking",
             risk: "write",
-            description: "准备取消图书馆座位预约（不执行）。不传 id 则默认取消最早的一条。",
+            description: "准备取消图书馆座位预约（不执行）。不传 id 则默认取消最近一条未使用的预约。",
             inputSchema: { bookingId: z.string().optional() },
             prepare: async (a) => {
                 const records = await run("cancel_seat_records", "read", (h) => h.getBookingRecords());
-                if (records.length === 0) throw new Error("当前没有座位预约");
-                const target = a.bookingId ? records.find((r) => r.id === a.bookingId) : records[0];
-                if (!target) throw new Error(`没有 id 为 ${a.bookingId} 的预约`);
-                return [{ bookingId: target.id }, `取消订座：${target.pos} @ ${target.time}`];
+                // 预约列表按时间倒序，records[0] 是最近一条；"已使用"等历史记录不可取消
+                const usable = records.filter((r) => r.status !== "已使用");
+                if (usable.length === 0) throw new Error("当前没有可取消的座位预约");
+                const target = a.bookingId ? usable.find((r) => r.id === a.bookingId) : usable[0];
+                if (!target) throw new Error(`没有 id 为 ${a.bookingId} 的可取消预约`);
+                return [{ bookingId: target.id }, `取消订座：${target.pos} @ ${target.time}（${target.status}）`];
             },
         }),
         makeWrite({
