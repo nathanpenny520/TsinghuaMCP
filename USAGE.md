@@ -112,6 +112,28 @@ claude mcp add thu-agent -- pnpm --dir /path/to/Tsinghua-agent --filter @thu-age
 codex mcp add thu-agent -- pnpm --dir /path/to/Tsinghua-agent --filter @thu-agent/mcp-server start
 ```
 
+或编辑 `~/.codex/config.toml`：
+
+```toml
+[mcp_servers.thu-agent]
+command = "pnpm"
+args = ["--dir", "/path/to/Tsinghua-agent", "--filter", "@thu-agent/mcp-server", "start"]
+
+[mcp_servers.thu-agent.env]
+THU_AGENT_MAX_RISK = "read"   # 给第三方模型建议只读
+```
+
+### 豆包桌面版 / 其他支持自定义 MCP 的客户端
+
+判断标准：客户端设置里能否添加"**本地命令行（stdio）MCP server**"。
+豆包桌面版 2025 起逐步支持 MCP；若工作版设置里有 MCP/扩展入口且允许填
+command + args，就按 Claude Desktop 同样的 JSON/表单填法接入，并建议在
+env 里注入 `THU_AGENT_MAX_RISK=read`（不同模型对两段式确认协议的遵守
+程度不一，只读模式把写工具整体隐藏，最稳）。
+
+注意：工作版若把 agent 跑在云端沙箱（而非本机），则同手机 App 一样属于
+下面的云端情形，无法直接连本机 stdio server。
+
 接好后重启客户端，问一句"我卡里还有多少钱"即可验证连通。
 
 ### 只支持云端 agent 的客户端？
