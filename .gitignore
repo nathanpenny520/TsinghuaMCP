@@ -26,3 +26,6 @@ data/
 reference/
 # mock 模式默认数据目录（与真实 data/ 隔离）
 data-mock/
+
+# 验证码临时图片（放根目录方便用户查看）
+/captcha-*.png

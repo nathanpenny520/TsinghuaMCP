@@ -1,6 +1,6 @@
 import { InfoHelper } from "../index";
 import { roamingWrapperWithMocks } from "./core";
-import { stringify, uFetch } from "../utils/network";
+import { cookies, stringify, uFetch, updateCookiesFromHeaders } from "../utils/network";
 import * as cheerio from "cheerio";
 import { LibError, UseregAuthError } from "../utils/error";
 import {
@@ -15,8 +15,25 @@ import {
 } from "../constants/strings";
 import { Device } from "../models/network/device";
 import { Balance } from "../models/network/balance";
-import { JSEncrypt } from "jsencrypt";
+import * as jsencryptModule from "jsencrypt";
 import { AccountInfo } from "../models/network/account";
+
+// jsencrypt 是 UMD 包，其命名导出在 Node/tsx 的 ESM 互操作下取不到
+// （jsencrypt_1.JSEncrypt is not a constructor），兼容两种导出形态取构造器。
+type JSEncryptLike = { setPublicKey(key: string): void; encrypt(text: string): string | false };
+type JSEncryptCtor = new () => JSEncryptLike;
+const getJSEncrypt = (): JSEncryptCtor => {
+    const m = jsencryptModule as unknown as { JSEncrypt?: JSEncryptCtor; default?: JSEncryptCtor | { JSEncrypt?: JSEncryptCtor } };
+    // 形态兜底：ESM 命名导出 / CJS require 直接返回构造器 /
+    // tsc __importStar 包装（函数型 CJS 模块被包成对象，原构造器留在 .default）
+    const ctor = m.JSEncrypt ?? m.default?.JSEncrypt ??
+        (typeof m === "function" ? (m as unknown as JSEncryptCtor) : undefined) ??
+        (typeof m.default === "function" ? (m.default as unknown as JSEncryptCtor) : undefined);
+    if (!ctor) {
+        throw new LibError("jsencrypt 模块加载异常：未找到 JSEncrypt 构造器");
+    }
+    return ctor;
+};
 
 export const webVPNTitle = "<title>清华大学WebVPN</title>";
 
@@ -48,15 +65,18 @@ export const loginUsereg = async (helper: InfoHelper, code: string): Promise<voi
         throw new Error("Failed to get csrf token.");
     }
     const rsa_pubkey_str = $("#public").val() as string;
-    const rsa_pubkey = new JSEncrypt();
+    const rsa_pubkey = new (getJSEncrypt())();
     rsa_pubkey.setPublicKey(rsa_pubkey_str);
 
     const {emailName} = await helper.getUserInfo();
     const password = rsa_pubkey.encrypt(helper.password);
 
-    const result = await (await fetch(NETWORK_VALIDATE_USER_URL, {
+    // 不能用裸 fetch：usereg 的 CSRF 与会话绑定，必须带上 lib 的 cookie jar，
+    // 并把响应的 Set-Cookie 回写（否则后续登录态丢失）。
+    const validateRes = await fetch(NETWORK_VALIDATE_USER_URL, {
         method: "POST",
         headers: {
+            Cookie: Object.keys(cookies).map((key) => `${key}=${cookies[key]}`).join(";"),
             "X-CSRF-Token": csrfToken,
             "X-Requested-With": "XMLHttpRequest",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -66,7 +86,9 @@ export const loginUsereg = async (helper: InfoHelper, code: string): Promise<voi
             "LoginForm[password]": password,
             "LoginForm[verifyCode]": code,
         }),
-    })).json();
+    });
+    updateCookiesFromHeaders(validateRes.headers);
+    const result = await validateRes.json() as { success: boolean; message?: string };
 
     if (result.success !== true) {
         throw new LibError(result.message);
