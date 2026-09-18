@@ -579,6 +579,11 @@ export function writeTools({ session, state, config, dataDir }: Deps): ToolDef[]
                           : await run("usereg_captcha_url", "read", (h) => h.getNetworkVerificationImageUrl());
                 if (!url) throw new Error("无法构造验证码地址");
                 const b64 = await run(`captcha_${kind}`, "read", () => uFetch(url as string));
+                // 校验确为 PNG（base64 解码后魔数 89504E47），否则上游多半返回了
+                // 错误页——直接以 base64 入 MCP 响应会在协议层炸出 Invalid Base64
+                if (!/^[A-Za-z0-9+/=\r\n]+$/.test(b64) || Buffer.from(b64, "base64").subarray(0, 4).toString("hex") !== "89504e47") {
+                    throw new Error(`验证码接口未返回图片（可能会话失效或入口变更）：${url}`);
+                }
                 const fs = await import("node:fs");
                 const path = await import("node:path");
                 const file = path.join(dataDir, `captcha-${kind}.png`);
