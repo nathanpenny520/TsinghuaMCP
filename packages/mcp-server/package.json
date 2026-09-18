@@ -1,0 +1,20 @@
+{
+    "name": "@thu-agent/mcp-server",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "MCP server exposing Tsinghua affairs as tools for any MCP client",
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.18.0",
+        "@thu-agent/core": "workspace:*",
+        "zod": "^4.6.5",
+        "dayjs": "^1.11.23",
+        "@thu-info/lib": "workspace:*"
+    },
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "typecheck": "tsc --noEmit",
+        "smoke": "tsx src/smoke.ts",
+        "perm-check": "tsx src/perm-check.ts"
+    }
+}

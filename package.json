@@ -1,0 +1,24 @@
+{
+    "name": "tsinghua-agent",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Long-running personal AI agent for Tsinghua University affairs",
+    "type": "module",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "build:lib": "pnpm --filter @thu-info/lib build",
+        "smoke": "pnpm --filter @thu-agent/cli smoke",
+        "perm-check": "pnpm --filter @thu-agent/mcp-server perm-check",
+        "cli": "pnpm --filter @thu-agent/cli cli",
+        "mcp": "pnpm --filter @thu-agent/mcp-server start",
+        "supervisor": "pnpm --filter @thu-agent/supervisor start",
+        "typecheck": "pnpm -r typecheck"
+    },
+    "devDependencies": {
+        "tsx": "^4.20.0",
+        "typescript": "6.0.3",
+        "@types/node": "^25.0.0"
+    }
+}

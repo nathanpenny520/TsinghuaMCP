@@ -1,0 +1,30 @@
+{
+    "name": "@thu-info/lib",
+    "version": "3.17.0",
+    "private": true,
+    "description": "Vendored from thu-info-community/thu-info-app@ee982c43 (BSL 1.1, non-commercial use only). Protocol layer for the Tsinghua web portal. Do not redistribute outside personal use.",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "license": "BSL-1.1",
+    "scripts": {
+        "build": "tsc"
+    },
+    "dependencies": {
+        "abort-controller": "3.0.0",
+        "cheerio": "1.2.0",
+        "cross-fetch": "4.1.0",
+        "crypto-js": "4.2.0",
+        "dayjs": "1.11.23",
+        "he": "^1.2.0",
+        "iconv-lite": "0.7.3",
+        "jsencrypt": "^3.3.2",
+        "sm-crypto": "^0.5.0"
+    },
+    "devDependencies": {
+        "@types/crypto-js": "4.2.2",
+        "@types/he": "^1.2.3",
+        "@types/sm-crypto": "^0.3.4",
+        "domelementtype": "^2.3.0",
+        "domhandler": "^5.0.3"
+    }
+}

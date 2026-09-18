@@ -1,0 +1,16 @@
+{
+    "name": "@thu-agent/cli",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Tsinghua agent CLI — dev harness and smoke tests",
+    "dependencies": {
+        "@thu-agent/core": "workspace:*",
+        "@thu-info/lib": "workspace:*"
+    },
+    "scripts": {
+        "cli": "tsx src/index.ts",
+        "smoke": "tsx src/index.ts smoke",
+        "typecheck": "tsc --noEmit"
+    }
+}

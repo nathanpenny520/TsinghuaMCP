@@ -1,0 +1,15 @@
+{
+    "name": "@thu-agent/supervisor",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Resident daemon: session keepalive, heartbeat, (Phase 3: monitors + notifications + long-running task table)",
+    "dependencies": {
+        "@thu-agent/core": "workspace:*",
+        "dayjs": "^1.11.23"
+    },
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "typecheck": "tsc --noEmit"
+    }
+}

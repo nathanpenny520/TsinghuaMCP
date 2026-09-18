@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "thu-agent": {
+            "command": "pnpm",
+            "args": [
+                "--dir",
+                "/Users/nathanpenny/Projects/Tsinghua-related-projects/Tsinghua-agent",
+                "--filter",
+                "@thu-agent/mcp-server",
+                "start"
+            ]
+        }
+    }
+}
