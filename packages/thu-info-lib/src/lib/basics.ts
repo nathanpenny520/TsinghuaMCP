@@ -162,28 +162,35 @@ export const getReport = (
         helper.graduate() ? "E35232808C08C8C5F199F13BF6B7F5D0": "B7EF0ADF9406335AD7905B30CD7B49B1",
         () => Promise.all([
             uFetch(helper.graduate() ? GET_YJS_REPORT_URL : (`${GET_BKS_REPORT_URL}&flag=di${flag}`)),
-            bx && flag === 1 ? uFetch(helper.graduate() ? YJS_REPORT_BXR_URL : BKS_REPORT_BXR_URL) : undefined,
+            // 必限/性质统计页：bx 过滤要用，也给每门课标注课程性质（必修/限选/任选）。
+            // 失败不致命：只损失 type 字段。
+            flag === 1
+                ? uFetch(helper.graduate() ? YJS_REPORT_BXR_URL : BKS_REPORT_BXR_URL).catch(() => undefined)
+                : Promise.resolve(undefined as string | undefined),
         ]).then(([str, bxStr]: [string, string | undefined]) => {
             const bxSet = new Set<string>();
+            const typeByCode = new Map<string, string>();
             if (bxStr) {
-                cheerio.load(bxStr)(".table-striped tr").each((index, element) => {
+                // WebVPN 会往单元格注入 vpn_eval 学分统计脚本尾巴，先剥掉再做精确比对
+                const cleanCell = (s: string) => s.replace(/vpn_eval[\s\S]*$/, "").replace(/\s+/g, "").trim();
+                cheerio.load(bxStr)("tr").each((_, element) => {
                     if (element.type === "tag") {
                         const transformedElement = cheerio.load(element)("td");
                         if (transformedElement.length > 8) {
-                            const type = getCheerioText(
-                                transformedElement[8],
-                                0,
-                            );
-                            if (type === "必修" || type === "限选" || type === "是") {
-                                bxSet.add(
-                                    getCheerioText(transformedElement[0], 0),
-                                );
+                            const code = cleanCell(cheerio.load(transformedElement[0]).text());
+                            const type = cleanCell(cheerio.load(transformedElement[8]).text());
+                            if (code) {
+                                typeByCode.set(code, type);
+                                if (type === "必修" || type === "限选" || type === "是") {
+                                    bxSet.add(code);
+                                }
                             }
                         }
                     }
                 });
             }
             const graduate = helper.graduate();
+            const applyBxFilter = bx && flag === 1;
             const result = cheerio.load(str)("[cellspacing=1] tr")
                 .slice(1)
                 .map((_, element) => {
@@ -192,13 +199,16 @@ export const getReport = (
                     if (!newGPA) {
                         point = gradeToOldGPA.get(grade) ?? point;
                     }
-                    if (bxStr === undefined || bxSet.has(getCheerioText(element, 1))) {
+                    const code = getCheerioText(element, 1);
+                    if (!applyBxFilter || bxSet.has(code)) {
+                        const type = typeByCode.get(code.replace(/\s+/g, "").trim());
                         return {
                             name: getCheerioText(element, 3),
                             credit: Number(getCheerioText(element, 5)),
                             grade,
                             point,
                             semester: getCheerioText(element, graduate ? 13 : 11),
+                            ...(type ? {type} : {}),
                         };
                     } else {
                         return undefined;

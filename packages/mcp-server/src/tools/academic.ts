@@ -62,12 +62,17 @@ export function academicTools({ session }: Deps): ToolDef[] {
                         gradedCount++;
                     }
                 }
+                const typeCounts: Record<string, number> = {};
+                for (const c of courses) {
+                    if (c.type) typeCounts[c.type] = (typeCounts[c.type] ?? 0) + 1;
+                }
                 return ok({
                     summary: {
                         totalCourses: courses.length,
                         totalCredits: Number(totalCredits.toFixed(1)),
                         gradedCredits: Number(gradedCredits.toFixed(1)),
                         gpa: gradedCredits > 0 ? Number((weighted / gradedCredits).toFixed(3)) : null,
+                        typeCounts,
                         note: "GPA 仅统计有绩点数值的课程（P 等无绩点成绩不计入）",
                     },
                     courses,
