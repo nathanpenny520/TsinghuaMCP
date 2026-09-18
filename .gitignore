@@ -29,3 +29,8 @@ data-mock/
 
 # 验证码临时图片（放根目录方便用户查看）
 /captcha-*.png
+
+# 包内临时诊断脚本
+packages/*/venue-*.mjs
+packages/*/probe-*.mjs
+packages/*/pd*.mjs
