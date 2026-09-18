@@ -57,6 +57,8 @@ pnpm --dir /path/to/Tsinghua-agent --filter @thu-agent/mcp-server start
   } } }
   ```
 - **Codex CLI**：`codex mcp add thu-agent -- pnpm --dir /path/to/Tsinghua-agent --filter @thu-agent/mcp-server start`
+- **仅支持 HTTP 的客户端（豆包桌面版等）**：先 `pnpm httpd start` 启动本机
+  HTTP 入口，连接器填 `http://127.0.0.1:9876/mcp`（开关/自启见 USAGE §2）
 
 约 64 个工具，系统提示已内置两段式确认协议与验证码协同流程。
 验证码工具返回内嵌图片内容 + 本地 PNG 路径，本机 agent 可直接看图转述给用户。

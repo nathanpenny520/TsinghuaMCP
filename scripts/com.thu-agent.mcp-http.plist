@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  thu-agent HTTP MCP server 开机自启（launchd）
+  安装：
+    cp scripts/com.thu-agent.mcp-http.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.thu-agent.mcp-http.plist
+  卸载：
+    launchctl unload ~/Library/LaunchAgents/com.thu-agent.mcp-http.plist
+    rm ~/Library/LaunchAgents/com.thu-agent.mcp-http.plist
+  注意：用 launchd 常驻后不要再 pnpm httpd start/stop 手动开关（launchd 会拉活），
+  查看状态仍可用 pnpm httpd status；改 .env 后 launchctl kickstart -k gui/$(id -u)/com.thu-agent.mcp-http 重启。
+  若路径不同，把下面两处 /Users/nathanpenny/... 换成你的仓库位置。
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.thu-agent.mcp-http</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/pnpm</string>
+        <string>--dir</string>
+        <string>/Users/nathanpenny/Projects/Tsinghua-related-projects/Tsinghua-agent</string>
+        <string>--filter</string>
+        <string>@thu-agent/mcp-server</string>
+        <string>start:http</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/nathanpenny/Projects/Tsinghua-related-projects/Tsinghua-agent/data/http-server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/nathanpenny/Projects/Tsinghua-related-projects/Tsinghua-agent/data/http-server.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/nathanpenny/Projects/Tsinghua-related-projects/Tsinghua-agent</string>
+</dict>
+</plist>

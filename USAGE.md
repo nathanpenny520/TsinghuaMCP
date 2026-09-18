@@ -125,31 +125,46 @@ THU_AGENT_MAX_RISK = "read"   # 给第三方模型建议只读
 
 ### 豆包桌面版（HTTP 连接器）
 
-豆包只支持 HTTP 传输，用本机 HTTP 入口（`packages/mcp-server/src/http.ts`）：
+豆包只支持 HTTP 传输，用本机 HTTP 入口（`packages/mcp-server/src/http.ts`）。
+
+**① 启动服务**（`pnpm httpd`，等价于 `bash scripts/httpd.sh`）：
 
 ```bash
-# 1) 先在本机常驻启动 HTTP server（默认端口 9876，仅监听 127.0.0.1）
-pnpm --filter @thu-agent/mcp-server start:http
-# 想放开写工具时：THU_AGENT_MAX_RISK=write+pay pnpm --filter @thu-agent/mcp-server start:http
+pnpm httpd start     # 后台启动（日志: data/http-server.log）
+pnpm httpd status    # 查看状态（含 endpoint 健康检查）
+pnpm httpd restart   # 重启（改 .env 配置后用它生效）
+pnpm httpd stop      # 停止
 ```
+
+配置（读 `.env`，也可启动前用环境变量覆盖）：
+- `THU_HTTP_PORT`（默认 `9876`）、`THU_HTTP_TOKEN`（可选共享口令）
+- `THU_AGENT_MOCK=0`（真实数据）、`THU_AGENT_MAX_RISK=read`（见 §3）
+
+**② 豆包"新建自定义连接器"里填**：
+
+| 字段 | 值 |
+|---|---|
+| 服务器名称 | `thu-agent` |
+| 传输类型 | HTTP |
+| 服务器 URL | `http://127.0.0.1:9876/mcp` |
+| 自定义 Headers | 留空（若设了 `THU_HTTP_TOKEN`，加 `Authorization: Bearer <值>`） |
+
+**③ 开机自启（可选，launchd）**：
 
 ```bash
-# 2) 豆包"新建自定义连接器"里填：
-#    服务器名称： thu-agent
-#    传输类型：   HTTP
-#    服务器 URL： http://127.0.0.1:9876/mcp
-#    自定义 Headers：留空（若启动时设了 THU_HTTP_TOKEN，
-#                 则加 Authorization: Bearer <THU_HTTP_TOKEN 的值>）
+cp scripts/com.thu-agent.mcp-http.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.thu-agent.mcp-http.plist
+# 卸载: launchctl unload ~/Library/LaunchAgents/com.thu-agent.mcp-http.plist
 ```
 
-- 仅监听 loopback，凭据与学校会话不出本机；`.env` 的 `THU_AGENT_MOCK=0` 时
-  即为真实数据
-- **豆包等第三方模型建议保持 `THU_AGENT_MAX_RISK=read`**（当前 .env 即是）：
-  26 个写/资金工具整体不注册，只读最稳
-- 可选 `THU_HTTP_TOKEN=<任意串>`：设置后连接器需带 `Authorization: Bearer <串>`
-  头，防止本机其他进程调用
-- server 需保持运行（前台终端或 launchd 常驻）；豆包连接器"仅支持在本地电脑
-  中使用"正好匹配本机 HTTP 形态
+注意：用 launchd 常驻后**不要再 `pnpm httpd start/stop` 手动开关**（launchd 会自动拉活），
+改配置后用 `launchctl kickstart -k gui/$(id -u)/com.thu-agent.mcp-http` 重启；
+`pnpm httpd status` 仍可用于查看。
+
+**安全说明**：仅监听 `127.0.0.1`，凭据与学校会话不出本机；**豆包等第三方模型
+建议保持 `THU_AGENT_MAX_RISK=read`**（当前 .env 即是）——26 个写/资金工具整体
+不注册，只读最稳；可选设 `THU_HTTP_TOKEN=<任意串>`，连接器里加
+`Authorization: Bearer <串>`，防本机其他进程调用。
 
 ### 豆包工作版等其他支持本地命令行 MCP 的客户端
 
