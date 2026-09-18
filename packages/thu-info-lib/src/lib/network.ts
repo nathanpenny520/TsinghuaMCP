@@ -23,12 +23,14 @@ import { AccountInfo } from "../models/network/account";
 type JSEncryptLike = { setPublicKey(key: string): void; encrypt(text: string): string | false };
 type JSEncryptCtor = new () => JSEncryptLike;
 const getJSEncrypt = (): JSEncryptCtor => {
-    const m = jsencryptModule as unknown as { JSEncrypt?: JSEncryptCtor; default?: JSEncryptCtor | { JSEncrypt?: JSEncryptCtor } };
+    const m = jsencryptModule as unknown as { JSEncrypt?: JSEncryptCtor; default?: { JSEncrypt?: JSEncryptCtor } };
     // 形态兜底：ESM 命名导出 / CJS require 直接返回构造器 /
     // tsc __importStar 包装（函数型 CJS 模块被包成对象，原构造器留在 .default）
-    const ctor = m.JSEncrypt ?? m.default?.JSEncrypt ??
-        (typeof m === "function" ? (m as unknown as JSEncryptCtor) : undefined) ??
-        (typeof m.default === "function" ? (m.default as unknown as JSEncryptCtor) : undefined);
+    const ctor = m.JSEncrypt ?? m.default?.JSEncrypt
+        ?? (typeof m === "function" ? (m as unknown as JSEncryptCtor) : undefined)
+        ?? (typeof (m as { default?: unknown }).default === "function"
+            ? ((m as { default: unknown }).default as JSEncryptCtor)
+            : undefined);
     if (!ctor) {
         throw new LibError("jsencrypt 模块加载异常：未找到 JSEncrypt 构造器");
     }

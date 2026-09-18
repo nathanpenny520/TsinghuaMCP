@@ -56,6 +56,11 @@ export class DormAuthError extends LibError {
 
 }
 
+/** 新版体育场馆平台（venue）登录/会话异常 */
+export class VenueAuthError extends LibError {
+
+}
+
 export class IdAuthError extends LibError {
 
 }

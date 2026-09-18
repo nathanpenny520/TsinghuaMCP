@@ -5,7 +5,6 @@ import path from "node:path";
 import { ok } from "../util.js";
 import { tool } from "../registry.js";
 import type { Deps, ToolDef } from "../registry.js";
-import { sportsIdInfoList } from "@thu-info/lib/dist/lib/sports.js";
 
 export function campusTools({ session, dataDir }: Deps): ToolDef[] {
     const run = session.run.bind(session);
@@ -157,40 +156,44 @@ export function campusTools({ session, dataDir }: Deps): ToolDef[] {
         tool({
             name: "thu_get_sports_resources",
             description:
-                "查询体育场馆可订时段与价格（只查询，不预订）。gym 支持关键词，如 羽毛球 / 篮球 / 游泳。",
+                "查询体育场馆可订时段（新版体育平台，只查询，不预订）。gym 支持关键词，如 羽毛球 / 篮球 / 游泳 / 乒乓。",
             inputSchema: {
                 gym: z.string().describe("场馆/项目关键词"),
                 date: z.string().optional().describe("yyyy-MM-dd，默认今天"),
             },
             handler: async ({ gym, date }) => {
                 const d = date ?? dayjs().format("YYYY-MM-DD");
-                const gyms = sportsIdInfoList.filter((g) => g.name.includes(gym));
-                if (gyms.length === 0) {
-                    return ok({ error: `未找到含"${gym}"的场馆`, available: sportsIdInfoList.map((g) => g.name) });
+                const scenes = await run("get_venue_scenes", "read", (h) => h.getVenueScenes());
+                const matched = scenes.filter((s) => s.sceneName.includes(gym));
+                if (matched.length === 0) {
+                    return ok({ error: `未找到含"${gym}"的场景`, available: scenes.map((s) => s.sceneName) });
                 }
                 const results = [];
-                for (const g of gyms) {
-                    const info = await run("get_sports_resources", "read", (h) => h.getSportsResources(g.gymId, g.itemId, d));
-                    results.push({
-                        name: g.name,
-                        maxBookings: info.count,
-                        bookableNow: info.init > 0,
-                        slots: info.data.map((s) => ({
-                            time: s.timeSession,
-                            field: s.fieldName,
-                            cost: s.cost ?? 0,
-                            canBook: s.canNetBook && !s.locked && !s.userType,
-                        })),
-                    });
+                for (const scene of matched.slice(0, 3)) {
+                    const rooms = await run("get_venue_rooms", "read", (h) => h.getVenueSiteRooms(scene.uuid));
+                    const fields = [];
+                    for (const room of rooms.slice(0, 10)) {
+                        const periods = await run("get_venue_periods", "read", (h) =>
+                            h.getVenuePeriods(scene.uuid, room.uuid, room.siteType, d, d));
+                        const day = periods.find((p) => p.currentDate === d) ?? periods[0];
+                        fields.push({
+                            site: `${room.building ?? ""} ${room.floor ?? ""} ${room.siteName}`.trim(),
+                            open: day?.openStatus,
+                            bookable: day?.reserveStatus === "Y",
+                            reason: day?.reserveStatusReason,
+                            periods: day?.reserveInfo ?? [],
+                        });
+                    }
+                    results.push({ scene: scene.sceneName, date: d, fields });
                 }
-                return ok({ date: d, gyms: results });
+                return ok({ date: d, scenes: results });
             },
         }),
         tool({
             name: "thu_get_sports_records",
-            description: "查询我的体育场馆预约记录（含待支付）。",
+            description: "查询我的体育场馆预约记录（新版体育平台，跨全部场景）。",
             inputSchema: {},
-            handler: async () => ok(await run("get_sports_records", "read", (h) => h.getSportsReservationRecords())),
+            handler: async () => ok(await run("get_venue_my_reservations", "read", (h) => h.getVenueMyReservations())),
         }),
         tool({
             name: "thu_get_network_balance",

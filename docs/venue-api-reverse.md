@@ -55,30 +55,56 @@ SPA 还有 AES-CBC（key=getKeys().join("")，iv="0000000000000000"，Iso10126 p
 - `POST api/reserve/addReserve` — 下单；`POST api/reserve/current/page` — 我的预约分页；
   `POST api/reserve/lockSite` / `unLockSite`；另有 `/api/reserve/custom/addReserve`。
 
-## 登录链（CAS，status: check POST 调通前差一步）
+## 登录链（✅ 已全链路调通，实现在 `src/lib/venue.ts`）
 
 1. `GET site/cas/address/list?redirectUrl=<encodeURIComponent(回跳地址)>`
    → `data[0]` = `site/authcenter/toLoginPage?redirectUrl=...&typeCode=&extInfo=cas:<uuid>`
 2. GET 该地址 → 302 到 `https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/<hash>/0?/site/authce...`
-   （id 的 CAS 登录页，含 `#sm2publicKey`；**SSO 已登录时并不会自动带票跳过**，实测仍出登录表单）
-3. 凭据 POST：同 lib 现有 id 登录（`i_user` / `"04"+sm2.doEncrypt(password, sm2Key)` /
-   `fingerPrint` / `fingerGenPrint:""` / `i_captcha:""`）。
-   POST 目标 = `https://id.tsinghua.edu.cn/do/off/ui/auth/login/check`（lib 的 ID_LOGIN_URL）。
-   ⚠️ 现状：脚本环境 POST 返回裸"出错了"页（gb2312）。待查：表单隐藏字段（页面 form 里
-   可能还有 csrf/extInfo）、Referer、或 check 需要的额外字段。浏览器里手动登录正常，
-   **下一步最佳路径：在 Chrome 实抓一次登录的 check 请求体与头做对照**。
-4. 登录成功页含"登录成功。正在重定向到"+ `<a href=回跳ticket地址>`，GET 它即建立
-   sports.tsinghua.edu.cn 会话 cookie（后续带 x-api-version 的签名请求即可）。
+   （id 的 CAS 登录页，含 `#sm2publicKey`；**即使 id 有 SSO 会话也会出登录表单**，需凭据 POST）
+3. 凭据 POST 到 `ID_LOGIN_URL`（/do/off/ui/auth/login/check），**必须**：
+   - 头带 `Referer: <登录入口URL>` 和 `Origin`（缺了上游返回裸"出错了"页）；
+   - body 用完整字段：`i_user` / `"04"+sm2.doEncrypt(password, sm2Key)` / `singleLogin=on` /
+     `fingerPrint` / `fingerGenPrint=` / `fingerGenPrint3=` / `deviceName` / `i_captcha=`
+     （浏览器实抓对照发现；少 singleLogin/deviceName 就报"出错了"）
+4. 如响应为"二次认证"页 → `/b/doubleAuth/login` 的 action 协议
+   （FIND_APPROACHES → VERITY_TOTP_CODE，与 lib 现有 2FA 相同，TOTP 可全自动）
+5. 登录成功页 `<a href>` = `venue/site/authcenter/doAuth/<uuid>?ticket=...`，GET 它
+   → 302 到 `venue/#/home?uniToken=<token>`（**鉴权凭证是 uniToken，大小写敏感**）
+6. `POST site/cas/token?签名`，**JSON body** `{platForm:"CAS", client:"PC", token:<uniToken>, extInfo:""}`
+   → `data.token` = 会话 token
+7. 之后所有 API 带请求头 `token: <会话token>`（SPA 拦截器从 localStorage 读，
+   key 为 "token"；与会话 cookie 无关）
 
-## 迁移方案（lib 侧，建议新模块 src/lib/venue.ts）
+## 场地/时段 API（✅ 已调通）
 
-1. `venueSignFetch(path, extra)`：md5 签名 + x-api-version 头，走 uFetch（复用 cookie jar）。
-2. `loginVenueSports(helper)`：上面 CAS 链，第 3 步调通后返回会话。
-3. 只读三件套：`getVenueMenu()` → `getVenueScenes(menuUuid)` → `getVenuePeriods(...)`，
-   重新接线 MCP `thu_get_sports_resources`（旧的 gymId/itemId 概念换成 menu→scene→site）。
-4. 预约/付款/退订：`/api/reserve/addReserve` 等，含滑块验证码
-   (`site/system/captcha/drag/get`)，二期再做；`src/lib/sports.ts` 旧实现标注废弃。
-5. `MOCK_SPORTS_*` mock 数据同步更新。
+- `GET api/site/scene/list` — 全部 33 个场景（scene uuid 与菜单叶子 uuid 相同）
+- `POST api/site/choose`（实测 GET query 也可）— 场地层级，`siteType` 是枚举字符串：
+  `BUILDING`（楼宇）→ 带 `siteUuid=<楼宇uuid>` 查 `FLOOR`（楼层）→ 再查 `ROOM`（场地）
+- `POST api/reserve/current/period` — body：
+  `{sceneUuid, siteUuid, siteType:"ROOM", resvKind:"PERIOD_RESERVE",
+    reserveStartDate, reserveEndDate, startTime:"08:00", endTime:"22:00"}`
+  → `data.groupReserveVos[]` 按日期：`openRule.openStatus`、`reserveStatus(Y/N)`、
+  `reserveStatusReason`、`reserveInfo[]`（可约时段明细，状态为 N 时为空）
+- `POST api/reserve/current/page` — 我的预约，**必须带 sceneUuid**（按场景隔离，需逐场景轮询）
+
+实测注记：普通学生账号对部分场馆返回 `reserveStatus:"N" / 不满足预约条件`（reserveInfo 为空），
+为上游对该账号的真实资格判定，与接口无关；同一账号在网页端的判定应一致。
+
+## 迁移状态（lib 侧：src/lib/venue.ts，2026-09-18）
+
+✅ 已完成：
+- 签名与请求封装（venueSignQuery / venueFetch，含 1130002 自动重登）
+- `loginVenueSports`：完整 CAS 链（含 TOTP 自动化）→ 会话 token
+- `getVenueScenes` / `getVenueSiteRooms`（楼宇→楼层→房间展开）/ `getVenuePeriods` /
+  `getVenueMyReservations`
+- MCP 重接线：`thu_get_sports_resources`（gym 关键词→场景→场地→时段）、
+  `thu_get_sports_records`（跨场景轮询）；mock 模式可用
+
+⏳ 待做（预约写路径）：
+- `POST api/reserve/addReserve` 下单体结构、`lockSite`/`unLockSite` 锁场、
+  滑块验证码（`site/system/captcha/drag/get`，需图像滑块求解或人机协作）、
+  在线支付（zjjsfw webPay）；对应 `thu_prepare_sports_booking/pay/unsubscribe`
+  目前返回明确的"迁移中"错误，待上述逆向完成后恢复。
 
 ## 浏览器抓包要点（继续逆向时用）
 - Chrome devtools MCP 可直接打开 venue 页面抓 XHR（请求列表见 CDP network 面板）。

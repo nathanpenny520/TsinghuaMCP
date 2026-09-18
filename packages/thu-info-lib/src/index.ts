@@ -75,6 +75,13 @@ import {
     ValidReceiptTypes,
 } from "./lib/sports";
 import {
+    getVenueMyReservations,
+    getVenuePeriods,
+    getVenueScenes,
+    getVenueSiteRooms,
+    loginVenueSports,
+} from "./lib/venue";
+import {
     getCrTimetable,
     getCrCaptchaUrl,
     getCoursePlan,
@@ -953,6 +960,24 @@ export class InfoHelper {
      * Gets all active sports reservation records.
      */
     public getSportsReservationRecords = async () => getSportsReservationRecords(this);
+
+    // ── 新版体育场馆平台（venue）────────────────────────────────────
+
+    /** 登录新版体育场馆平台，返回会话 token（一般无需手动调用，查询类方法自动登录） */
+    public loginVenueSports = async () => loginVenueSports(this);
+
+    /** 全部可预约场景（气膜馆羽毛球/北体篮球/游泳…） */
+    public getVenueScenes = async () => getVenueScenes(this);
+
+    /** 场景下全部可约场地（楼宇→楼层→房间展开） */
+    public getVenueSiteRooms = async (sceneUuid: string) => getVenueSiteRooms(this, sceneUuid);
+
+    /** 场地在日期区间内的开放时段与可约状态 */
+    public getVenuePeriods = async (sceneUuid: string, siteUuid: string, siteType: string, beginDate: string, endDate: string) =>
+        getVenuePeriods(this, sceneUuid, siteUuid, siteType, beginDate, endDate);
+
+    /** 跨场景查询我的预约 */
+    public getVenueMyReservations = async () => getVenueMyReservations(this);
 
     /**
      * Make sports reservation payment with a payId.

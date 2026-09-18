@@ -10,7 +10,6 @@ import { ScheduleType } from "@thu-info/lib/dist/models/schedule/schedule.js";
 import type { Schedule } from "@thu-info/lib/dist/models/schedule/schedule.js";
 import { scheduleTimeAdd } from "@thu-info/lib/dist/models/schedule/schedule.js";
 import { CardRechargeType } from "@thu-info/lib/dist/models/card/recharge.js";
-import { sportsIdInfoList } from "@thu-info/lib/dist/lib/sports.js";
 import { uFetch } from "@thu-info/lib/dist/utils/network.js";
 
 /**
@@ -476,61 +475,29 @@ export function writeTools({ session, state, config, dataDir }: Deps): ToolDef[]
                 phone: z.string().optional().describe("联系电话，缺省用系统里存的"),
                 captchaCode: z.string().describe("验证码（先调 thu_get_captcha）"),
             },
-            prepare: async (a) => {
-                const gyms = sportsIdInfoList.filter((g) => g.name.includes(a.gym));
-                if (gyms.length === 0) throw new Error(`未找到场馆 "${a.gym}"`);
-                for (const g of gyms) {
-                    const info = await run("sports_res", "read", (h) => h.getSportsResources(g.gymId, g.itemId, a.date));
-                    const slot = info.data.find(
-                        (s) => s.timeSession === a.time && s.canNetBook && !s.locked && !s.userType,
-                    );
-                    if (slot) {
-                        return [
-                            {
-                                gymId: g.gymId,
-                                itemId: g.itemId,
-                                date: a.date,
-                                time: a.time,
-                                totalCost: slot.cost ?? 0,
-                                resHashId: slot.resHash,
-                                phone: a.phone ?? info.phone ?? "",
-                                captchaCode: a.captchaCode,
-                            },
-                            `订场：${g.name} ${a.date} ${a.time}，${slot.cost ?? 0} 元（${slot.fieldName}）`,
-                        ];
-                    }
-                }
-                throw new Error("该时段不可订（已被占/未开放/不可网上订），先用 thu_get_sports_resources 查可订时段");
+            prepare: async () => {
+                // 旧 gymbook 体系已下线；新版平台预约需滑块验证码与 addReserve 接口逆向（见 docs/venue-api-reverse.md）
+                throw new Error("体育系统已迁移新版平台，预订功能迁移中。可先用 thu_get_sports_resources 查询可订时段");
             },
         }),
         makeWrite({
             name: "thu_prepare_sports_unsubscribe",
             action: "sports_unsubscribe",
             risk: "write",
-            description: "准备退订体育预约（不执行；只能退未支付的）。不传 bookId 默认退最早一条未支付。",
+            description: "准备退订体育预约（新版平台迁移中，暂不可用）。",
             inputSchema: { bookId: z.string().optional() },
-            prepare: async (a) => {
-                const records = await run("sports_records", "read", (h) => h.getSportsReservationRecords());
-                const unpaid = records.filter((r) => r.bookId);
-                if (unpaid.length === 0) throw new Error("没有可退订的预约");
-                const target = a.bookId ? unpaid.find((r) => r.bookId === a.bookId) : unpaid[0];
-                if (!target) throw new Error("未找到该预约");
-                return [{ bookId: target.bookId }, `退订：${target.name} ${target.field} ${target.time}`];
+            prepare: async () => {
+                throw new Error("体育系统已迁移新版平台，退订功能迁移中。预约记录可用 thu_get_sports_records 查看");
             },
         }),
         makeWrite({
             name: "thu_prepare_sports_pay",
             action: "sports_pay",
             risk: "write+pay",
-            description: "准备支付一笔未支付的体育预约（确认后返回支付宝码）。",
+            description: "准备支付一笔未支付的体育预约（新版平台迁移中，暂不可用）。",
             inputSchema: { bookId: z.string().optional() },
-            prepare: async (a) => {
-                const records = await run("sports_pay_records", "read", (h) => h.getSportsReservationRecords());
-                const unpaid = records.filter((r) => r.payId);
-                if (unpaid.length === 0) throw new Error("没有待支付的预约");
-                const target = a.bookId ? unpaid.find((r) => r.payId === a.bookId) : unpaid[0];
-                if (!target) throw new Error("未找到该预约");
-                return [{ payId: target.payId }, `支付：${target.name} ${target.field} ${target.time}（${target.price}）`];
+            prepare: async () => {
+                throw new Error("体育系统已迁移新版平台，在线支付功能迁移中");
             },
         }),
         makeWrite({
