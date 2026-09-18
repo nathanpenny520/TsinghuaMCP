@@ -84,8 +84,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const password = mock ? "8888" : env.THU_PASSWORD ?? "";
     const dataDir = env.THU_AGENT_DATA_DIR
         ? path.resolve(env.THU_AGENT_DATA_DIR)
-        : // default: <repo>/data — resolved relative to this package, stable no matter the cwd
-          path.resolve(import.meta.dirname, "../../../data");
+        : // default: <repo>/data — resolved relative to this package, stable no matter the cwd.
+          // mock 模式单独用 data-mock，避免 mock 测试产生的待确认单/审计记录
+          // 混进真实数据（曾导致挂失/充值等 mock 单残留在真实确认队列里）。
+          mock
+          ? path.resolve(import.meta.dirname, "../../../data-mock")
+          : path.resolve(import.meta.dirname, "../../../data");
     fs.mkdirSync(dataDir, { recursive: true });
     return {
         userId,

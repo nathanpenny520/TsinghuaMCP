@@ -240,7 +240,7 @@ export const getSportsReservationRecords = async (
         const $ = await uFetch(SPORTS_UNPAID_URL).then(cheerio.load);
         const tables = $("table");
         if (tables.length === 0) {
-            throw new SportsError();
+            throw new SportsError("体育预约记录页面无表格（可能未登录体育系统或页面已改版）");
         }
         return $("tbody tr").toArray().map((e) => {
             const name = getCheerioText(e, 1);

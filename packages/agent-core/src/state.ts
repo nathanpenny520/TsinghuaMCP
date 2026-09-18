@@ -79,8 +79,7 @@ export class State {
     }
 
     createPending(action: string, params: unknown, risk: "write" | "write+pay", summary: string, ttlMs = 5 * 60e3): string {
-        // 顺手清理过期
-        this.db.prepare("DELETE FROM pending_actions WHERE expires < datetime('now', 'localtime')").run();
+        this.purgeExpiredPending();
         const code = this.newCode();
         const expires = new Date(Date.now() + ttlMs).toISOString();
         this.db
@@ -113,10 +112,19 @@ export class State {
     }
 
     listPending(): { code: string; action: string; summary: string; risk: string; created: string }[] {
-        this.db.prepare("DELETE FROM pending_actions WHERE expires < datetime('now', 'localtime')").run();
+        this.purgeExpiredPending();
         return this.db
             .prepare("SELECT code, action, summary, risk, created FROM pending_actions WHERE status = 'pending' ORDER BY created DESC")
             .all() as never;
+    }
+
+    /**
+     * 清理过期待确认单。expires 存的是 JS toISOString()（UTC），
+     * 必须用同格式比较——之前用 datetime('now','localtime') 生成
+     * "YYYY-MM-DD HH:MM:SS"，与 ISO 串逐字符比较永远为 false，过期清理形同虚设。
+     */
+    private purgeExpiredPending(): void {
+        this.db.prepare("DELETE FROM pending_actions WHERE expires < ?").run(new Date().toISOString());
     }
 
     // ── monitors（长程监控规则，agent 可增删）──────────────────────────

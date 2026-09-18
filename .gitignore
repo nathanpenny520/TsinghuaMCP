@@ -24,3 +24,5 @@ data/
 
 # upstream reference code (只读参考,不入库)
 reference/
+# mock 模式默认数据目录（与真实 data/ 隔离）
+data-mock/

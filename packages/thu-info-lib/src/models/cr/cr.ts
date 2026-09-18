@@ -89,12 +89,12 @@ export interface CrSearchResult {
 
 export interface SelectedCourse {
     type: string;        // 选课属性
-    will: 1 | 2 | 3;     // 选课志愿
+    will?: 1 | 2 | 3;    // 选课志愿（已选结果页无此列，仅有 mock 数据提供）
     id: string;          // 课程号
     seq: string;         // 课序号
     name: string;        // 课程名
     time: string;        // 上课时间
-    teacher: string;     // 教室名
+    teacher: string;     // 教师名
     credit: number;      // 学分
     secondary: boolean;  // 是否二级选课
 }

@@ -417,18 +417,19 @@ export const getSelectedCourses = async (helper: InfoHelper, semesterId: string)
     async () => {
         const yxHtml = await crFetch(`${helper.graduate() ? CR_SELECT_YJS_URL : CR_SELECT_URL}?m=yxSearchTab&p_xnxq=${semesterId}&tokenPriFlag=yx`);
         const $ = cheerio.load(yxHtml);
+        // 真实列序（2026-09 实测）：
+        // [0]退课状态 [1]选课属性 [2]课号 [3]课名 [4]课序号 [5]上课时间 [6]教师 [7]学分 [8]是否二学位
         return $(".trr2").map((_, e) => {
             const tds = cheerio.load(e)(".tdd2");
             return {
                 type: cheerio.load(tds[1]).text(),
-                will: willStringToNumber(cheerio.load(tds[2]).text()),
-                id: cheerio.load(tds[3]).text(),
-                seq: cheerio.load(tds[5]).text(),
-                name: cheerio.load(tds[4]).text().trim(),
-                time: cheerio.load(tds[6]).text(),
-                teacher: cheerio.load(tds[7]).text(),
-                credit: Number(cheerio.load(tds[8]).text()),
-                secondary: cheerio.load(tds[9]).text() === "是",
+                id: cheerio.load(tds[2]).text(),
+                seq: cheerio.load(tds[4]).text(),
+                name: cheerio.load(tds[3]).text().trim(),
+                time: cheerio.load(tds[5]).text(),
+                teacher: cheerio.load(tds[6]).text(),
+                credit: Number(cheerio.load(tds[7]).text()),
+                secondary: cheerio.load(tds[8]).text() === "是",
             } as SelectedCourse;
         }).get();
     },

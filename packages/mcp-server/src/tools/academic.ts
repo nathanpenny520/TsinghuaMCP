@@ -153,9 +153,11 @@ export function academicTools({ session }: Deps): ToolDef[] {
         tool({
             name: "thu_get_selected_courses",
             description: "查询已选课程列表。",
-            inputSchema: { semesterId: z.string().optional().describe("学年学期，如 2026-2027-1，缺省最新") },
+            inputSchema: { semesterId: z.string().optional().describe("学年学期，如 2026-2027-1，缺省校历当前学期") },
             handler: async ({ semesterId }) => {
-                const sem = semesterId ?? (await latestSemester());
+                // 已选课程默认当前学期；CR 可选学期列表（latestSemester）在选课期外
+                // 可能不含当前学期，只应给选课/退课等写操作用。
+                const sem = semesterId ?? (await run("get_calendar", "read", (h) => h.getCalendar())).semesterId;
                 if (!sem) return ok({ error: "没有可选学期" });
                 const courses = await run("get_selected_courses", "read", (h) => h.getSelectedCourses(sem));
                 return ok({ semesterId: sem, courses });
