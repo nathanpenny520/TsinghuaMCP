@@ -15,7 +15,8 @@
         "mcp": "pnpm --filter @thu-agent/mcp-server start",
         "supervisor": "pnpm --filter @thu-agent/supervisor start",
         "typecheck": "pnpm -r typecheck",
-        "httpd": "bash scripts/httpd.sh"
+        "httpd": "bash scripts/httpd.sh",
+        "login-ui": "pnpm --filter @thu-agent/cli login-ui"
     },
     "devDependencies": {
         "tsx": "^4.20.0",

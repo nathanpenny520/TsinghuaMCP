@@ -1,12 +1,13 @@
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
+import { loadStoredSecrets, storeKind, type StoreKind } from "./secrets.js";
 
 /**
- * Central configuration, sourced from environment variables (loaded via
- * `node --env-file=.env` or a real process environment).
- *
- * Keep this the single place that reads process.env for credentials.
+ * Central configuration. Secrets (password / TOTP / card password) come from
+ * the OS credential store first (written by `pnpm login`, see secrets.ts) and
+ * fall back to environment variables / `.env` during migration — `.env` should
+ * end up holding only non-secret config (mock flag, thresholds, notify URLs…).
  */
 
 /** 工具风险级别：read=只读；write=改上游/本地状态；write+pay=涉及资金或卡片状态 */
@@ -29,6 +30,8 @@ export interface Config {
     mock: boolean;
     /** directory holding state.sqlite and other durable agent state */
     dataDir: string;
+    /** 密码类凭据的实际来源：OS 凭据存储 / 明文 env（迁移期遗留）/ 未配置 */
+    credentialSource: StoreKind | "env" | "none";
     /** optional manually-pinned device fingerprint (32 hex chars) */
     fingerprint?: string;
     /**
@@ -50,6 +53,11 @@ export interface Config {
 }
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
+
+/** 仓库根目录（登录向导清理 .env 凭据行等场景使用） */
+export function repoRoot(): string {
+    return REPO_ROOT;
+}
 
 /**
  * Minimal .env loader (zero-dep). Real environment variables always win.
@@ -80,8 +88,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (!RISK_LEVELS.includes(maxRiskRaw as RiskLevel)) {
         throw new Error(`THU_AGENT_MAX_RISK 无效: "${maxRiskRaw}"（可选 ${RISK_LEVELS.join(" / ")}）`);
     }
-    const userId = mock ? "8888" : env.THU_USER_ID ?? "";
-    const password = mock ? "8888" : env.THU_PASSWORD ?? "";
+    // 凭据来源：OS 凭据存储（pnpm login 写入）优先，env/.env 仅作迁移期回退。
+    // mock 模式完全不触碰凭据存储。
+    const stored = mock ? {} : loadStoredSecrets();
+    const userId = mock ? "8888" : stored.userId ?? env.THU_USER_ID ?? "";
+    const password = mock ? "8888" : stored.password ?? env.THU_PASSWORD ?? "";
     const dataDir = env.THU_AGENT_DATA_DIR
         ? path.resolve(env.THU_AGENT_DATA_DIR)
         : // default: <repo>/data — resolved relative to this package, stable no matter the cwd.
@@ -94,10 +105,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     return {
         userId,
         password,
-        totpSecret: (env.THU_TOTP_SECRET ?? "").replace(/\s+/g, "").toUpperCase(),
-        // 清华一码通：校园卡交易密码与统一身份认证密码相同（若未单独设置）。
-        // 因此 .env 里的 THU_PASSWORD 实际等效于卡密——务必保持本机文件权限收紧。
-        cardPassword: env.THU_CARD_PASSWORD || password,
+        totpSecret: (stored.totpSecret ?? env.THU_TOTP_SECRET ?? "").replace(/\s+/g, "").toUpperCase(),
+        // 清华一码通：校园卡交易密码与统一身份认证密码相同（若未单独设置），
+        // 不单独填写时自动复用 password。等效卡密，只存 OS 凭据存储。
+        cardPassword: (stored.cardPassword ?? env.THU_CARD_PASSWORD) || password,
+        credentialSource: mock
+            ? "none"
+            : stored.password
+              ? storeKind()
+              : password
+                ? "env"
+                : "none",
         mock,
         maxRisk: maxRiskRaw as RiskLevel,
         dataDir,

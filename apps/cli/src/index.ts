@@ -4,10 +4,12 @@ function usage(): never {
     console.log(`用法: pnpm cli <命令>
 
 命令:
-  status    会话状态（登录与否、mock 模式、数据目录）
+  status    会话状态（登录与否、凭据来源、mock 模式、数据目录）
+  login-ui  图形化登录向导：浏览器里输学号/密码/二次认证，凭据存入 OS 凭据存储
+            （--mock 只试运行页面流程，不真实登录不保存）
   smoke     mock 模式全只读工具冒烟测试（离线）
-  login     真实登录测试（读取 .env 凭据，验证 SM2 登录 + roam）
-  totp      生成当前二次认证码（与手机验证器App对码，验证 THU_TOTP_SECRET 配置正确）
+  login     真实登录测试（凭据来自 OS 凭据存储或 .env 迁移回退，验证 SM2 登录 + roam）
+  totp      生成当前二次认证码（与手机验证器App对码，验证 TOTP secret 配置正确）
   totp-test 12种TOTP参数组合全扫描（手机码和agent码不一致时用来定位参数）
 `);
     process.exit(1);
@@ -22,10 +24,16 @@ async function main() {
     const session = new SessionManager(config, state, true);
 
     switch (cmd) {
+        case "login-ui": {
+            const { runLoginUi } = await import("./login-ui.js");
+            await runLoginUi();
+            break;
+        }
         case "status": {
+            const sourceName = { keyring: "OS 凭据存储", file: "本地文件(~/.thu-agent)", env: "明文 env/.env（建议 pnpm login 迁移）", none: "未配置" };
             console.log(`mock 模式: ${config.mock ? "是" : "否"}`);
             console.log(`数据目录:  ${config.dataDir}`);
-            console.log(`凭据:      ${config.userId ? `已配置 (${config.userId})` : "未配置"}`);
+            console.log(`凭据:      ${config.userId ? `已配置 (${config.userId})` : "未配置"}，来源: ${sourceName[config.credentialSource]}`);
             console.log(`TOTP:      ${config.totpSecret ? "已配置" : "未配置"}`);
             console.log(`会话:      ${session.sessionAgeMs() >= 0 ? "已建立" : "未登录"}`);
             break;

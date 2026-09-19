@@ -8,8 +8,9 @@ Desktop、Cursor、Codex CLI 等）帮你查事务、办事务、盯事务。读
 
 ## 0. 开始前必读（安全须知）
 
-- **密码即卡密**：清华一码通，`INFO 门户密码 ≈ 校园卡交易密码`。`.env` 里的
-  密码泄漏 ≈ 卡内资金可被操作。务必 `chmod 600 .env`，并开启 FileVault。
+- **密码即卡密**：清华一码通，`INFO 门户密码 ≈ 校园卡交易密码`。密码泄漏 ≈
+  卡内资金可被操作。因此**凭据不进任何明文文件**：默认走 OS 凭据存储
+  （macOS 钥匙串 / Windows 凭据管理器），见 §1 的 `pnpm login-ui`。
 - **写操作不是提示词约定，是代码强制**：任何写动作必须先 `prepare`（锁定参数、
   生成 5 分钟确认码）→ 你在对话里明确同意 → `confirm` 才会执行。参数在
   prepare 时锁定，confirm 无法篡改。高危动作（退课/挂失/解挂）额外要求你
@@ -33,35 +34,93 @@ pnpm install
 pnpm build:lib     # 编译 vendored 协议库（仅首次需要）
 ```
 
-配置凭据：
+### 配置凭据（图形化向导，推荐）
 
 ```bash
-cp .env.example .env
-chmod 600 .env
+pnpm login-ui
 ```
 
-编辑 `.env`，必填两项：
+会自动打开浏览器，在本地页面（只监听 127.0.0.1，带随机路径）里：
 
-| 变量 | 说明 |
-|---|---|
-| `THU_USER_ID` | 学号（全数字） |
-| `THU_PASSWORD` | INFO 门户密码 |
+1. 填学号、门户密码；可选填 TOTP 密钥（填了 2FA 全自动）和单独的卡密；
+2. 需要二次认证时在页面上选微信推送/短信并输入验证码；
+3. 成功后凭据自动写入 **OS 凭据存储**，并自动清理 `.env` 里的明文凭据行
+   （备份到 `.env.bak`）。本设备同时注册为受信设备——之后登录不再需要
+   二次认证，会话过期时 agent 用存储的凭据静默重登。
 
-**强烈建议**配置 `THU_TOTP_SECRET`（二次认证动态口令的密钥）：配置后 2FA 全
-自动，AI 无人值守也能重登录。获取方法见 `.env.example` 内详细注释（绑定入口
-在 id.tsinghua.edu.cn → 二次认证管理；不要把绑定二维码上传到任何在线网站）。
-不配也能用：首次登录手动选微信/短信完成 2FA 并注册受信设备，之后免 2FA。
+密码只经过内存与 OS 凭据存储，不落明文盘、不进日志。想换号/撤销就用
+`pnpm cli login` 重登，或删掉凭据存储里的 `thu-agent` 条目。
 
-**真实使用前把 `THU_AGENT_MOCK` 改为 `0`**（示例文件里默认 `1` 是离线假数据
-模式，用来开发测试，不会碰你的真实账号）。
+> 试跑向导页面而不真实登录：`THU_LOGIN_MOCK=1 pnpm login-ui`。
 
-首次登录验证（真实交互，完成 2FA 并注册受信设备）：
+### 迁移期回退（不推荐）
+
+`.env` 里的 `THU_USER_ID` / `THU_PASSWORD` / `THU_TOTP_SECRET` /
+`THU_CARD_PASSWORD` 仍然生效（优先级低于凭据存储），用于还没跑向导的老环境；
+跑一次 `pnpm login-ui` 即可彻底移除。`.env` 现在只放非敏感配置
+（`THU_AGENT_MOCK`、阈值、通知渠道等）。
+
+**真实使用前把 `.env` 里的 `THU_AGENT_MOCK` 改为 `0`**（示例文件里默认 `1`
+是离线假数据模式；向导成功后会自动移除该标记）。
+
+首次登录验证（真实交互）：
 
 ```bash
-pnpm cli login    # 终端里选择二次认证方式并输入验证码（仅需一次）
+pnpm cli login    # 用已存凭据真实登录，验证 SM2 登录 + roam
 pnpm cli check    # 五路真实数据源抽查（成绩/课表/卡/电费/校历）
-pnpm cli status   # 查看配置与会话状态
+pnpm cli status   # 查看配置、凭据来源与会话状态
 ```
+
+### AI 侧防误读加固（可选，推荐）
+
+`pnpm login-ui` 之后明文凭据已不存在，但 OS 凭据存储里的条目理论上仍可被
+同用户进程查询。给 Claude Code 加两道闸（防 AI 手滑把凭据捞进对话记录）：
+
+1. `permissions.deny`：禁止 Read/Edit/Write `**/.env` 与凭据存储目录；
+2. PreToolUse hook：Bash 命令里出现 `find-generic-password`、`THU_PASSWORD`、
+   `cat .env` 等模式时直接拒绝执行。
+
+安装（仓库自带脚本）：
+
+```bash
+mkdir -p ~/.claude/hooks && cp scripts/secret-guard.mjs ~/.claude/hooks/
+# 然后按 scripts/secret-guard.settings-snippet.json 合并进 ~/.claude/settings.json
+```
+
+hook 只是防误读的护栏，不是对抗性防线：AI 仍可能在你批准权限时做别的事，
+弹出的授权请求看清楚再点。
+
+### 公开仓库防泄露（本仓库适用）
+
+仓库是公开的，防泄露分四层，前三层已内置：
+
+1. **架构层**：密码/TOTP/卡密只在 OS 凭据存储，根本不进仓库；`.env` 只放
+   非敏感配置，且被 `.gitignore` 排除。
+2. **提交闸**（pre-commit，已启用）：`git config core.hooksPath scripts/githooks`
+   已设置——每次提交自动扫描暂存内容，疑似真实凭据（`THU_*` 带值、
+   api.day.app/ntfy.sh 真实 URL）直接拒绝。文档占位请写空值或"你的key"样式。
+3. **自检**：`bash scripts/scan-history-secrets.sh` 可随时全量扫描全部历史
+   （2026-09-19 首次审计：零泄露）。clone 新机器后建议先跑一次。
+4. **人这一层**：扫描器拦不住"手动把真实值粘贴进文档/issue/截图"——
+   GitHub 侧建议顺手开启 Settings → Code security → Push protection。
+
+紧急预案：万一真实凭据入库，处置顺序 = 立刻换密钥（Bark 换 key 重装即可、
+THU 密码去 change.tsinghua.edu.cn 改、TOTP 解绑重绑）→ 再清 git 历史
+（filter-repo）→ 强推。密钥作废优先于清史。
+
+### Windows 用户
+
+全流程支持，差异如下：
+
+| 环节 | macOS | Windows |
+|---|---|---|
+| 凭据存储 | 钥匙串（Keychain） | 凭据管理器（控制面板 → 凭据管理器 → Windows 凭据，条目名 `thu-agent`；不随微软账户漫游） |
+| 登录向导 | `open` 打开浏览器 | `start` 打开浏览器，其余完全一致 |
+| 常驻 daemon | launchd | 任务计划程序（`schtasks`）或 NSSM 包一层 `pnpm httpd` |
+| Claude Code 沙箱 | Seatbelt 可用 | 无沙箱实现，防误读更依赖上面的 hook + deny（两者在 Windows 同样可用） |
+
+注意：Windows 凭据管理器没有 macOS 那样的"应用访问确认"弹层，同用户进程
+可静默读取，因此 Windows 上 hook/deny 加固建议从"可选"升级为"必做"。
 
 ---
 

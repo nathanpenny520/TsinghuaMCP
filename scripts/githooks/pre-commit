@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# pre-commit：拦截疑似真实凭据入库（公开仓库防泄露闸门）
+# 配套启用: git config core.hooksPath scripts/githooks
+# 全量自检:  bash scripts/scan-history-secrets.sh
+# 绕过:     git commit --no-verify（确信无泄露时才用）
+set -uo pipefail
+
+fail=0
+# THU_HTTP_TOKEN 模式用拼接构造，避免 hook 源码自匹配（其余模式天然不自匹配）
+tok_re="THU_HTTP_TOKEN"'=[^[:space:]"'"'"']+'
+while IFS= read -r -d '' f; do
+    [ -f "$f" ] || continue
+    hits=$(grep -InE \
+        -e 'THU_(PASSWORD|TOTP_SECRET|CARD_PASSWORD)=[^[:space:]"'"'"']+' \
+        -e "$tok_re" \
+        -e 'api\.day\.app/[A-Za-z0-9_-]{8,}' \
+        -e 'ntfy\.sh/[A-Za-z0-9_-]{8,}' \
+        -- "$f" 2>/dev/null | grep -vcE '你的|your|示例|example|my-topic|任意串|<[^>]*>' || true)
+    if [ "${hits:-0}" -gt 0 ]; then
+        echo "✖ 拒绝提交: $f —— 有 ${hits} 行疑似真实凭据（THU_* 带值 / api.day.app / ntfy.sh）"
+        echo "  文档占位请写成『THU_PASSWORD= 』(空值) 或『https://api.day.app/你的key』样式。"
+        fail=1
+    fi
+done < <(git diff --cached --name-only -z)
+
+if [ "$fail" -eq 1 ]; then
+    echo "  自检脚本: bash scripts/scan-history-secrets.sh"
+    echo "  确认安全仍要提交: git commit --no-verify"
+fi
+exit "$fail"

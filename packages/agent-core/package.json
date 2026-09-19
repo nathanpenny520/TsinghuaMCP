@@ -7,8 +7,9 @@
     "license": "PRIVATE-REF-BSL",
     "description": "Shared session/state/config layer for the Tsinghua agent. Depends on BSL-licensed @thu-info/lib — personal non-commercial use only.",
     "dependencies": {
+        "@napi-rs/keyring": "^2.1.0",
         "@thu-info/lib": "workspace:*",
-        "otplib": "^12.0.1",
-        "dayjs": "^1.11.23"
+        "dayjs": "^1.11.23",
+        "otplib": "^12.0.1"
     }
 }

@@ -9,6 +9,7 @@
         "@thu-info/lib": "workspace:*"
     },
     "scripts": {
+        "login-ui": "tsx src/index.ts login-ui",
         "cli": "tsx src/index.ts",
         "smoke": "tsx src/index.ts smoke",
         "typecheck": "tsc --noEmit"
